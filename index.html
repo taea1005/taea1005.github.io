@@ -152,6 +152,12 @@ body{background:var(--bg);letter-spacing:-.012em}
 .inline-video-close{position:absolute;z-index:6;right:12px;top:12px;width:35px;height:35px;border:1px solid #ffffff7a;border-radius:50%;background:#111c;color:#fff;font-size:24px;line-height:1;display:grid;place-items:center;cursor:pointer}
 .inline-video-close:hover{background:#111}
 .project-art:has(> img)::before,.project-art:has(> img)::after{content:none!important;display:none!important}
+.project-art:has(> img)>.art-graphic{display:none!important}
+.card-video-play{position:absolute;z-index:4;right:13px;bottom:13px;width:36px;height:36px;display:grid;place-items:center;padding:0 0 0 2px;border:1px solid #ffffff6b;border-radius:50%;background:#17171bcc;color:#fff;font-size:15px;line-height:1;cursor:pointer;box-shadow:0 2px 10px #0008}
+.card-video-play:hover{background:#f06461;border-color:#f06461}
+.card-video-play:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.project-art.is-playing .card-video-play,.project-art.is-playing .art-label,.project-art.is-playing .art-index{display:none}
+.project-art .inline-video{position:absolute;inset:0;width:100%;height:100%;border:0;background:#09090b;z-index:5}
 </style>
 </head>
 <body>
@@ -234,17 +240,18 @@ body{background:var(--bg);letter-spacing:-.012em}
     } catch { /* Invalid video URL. */ }
     return '';
   };
+  let activeInlineVideo = null;
+  const projectVideo = (project) => (project.links || []).map((item) => safeUrl(item.url)).find((url) => youtubeId(url)) || '';
   const stopInlineVideo = (container) => {
     container.querySelector('iframe.inline-video')?.remove();
     container.querySelector('.inline-video-close')?.remove();
     container.classList.remove('is-playing');
+    if (activeInlineVideo === container) activeInlineVideo = null;
   };
   const playInlineVideo = (container, url, title = '플레이 영상') => {
     const id = youtubeId(url);
     if (!id) return;
-    for (const other of [byId('hero-media'), byId('modal-art')]) {
-      if (other && other !== container) stopInlineVideo(other);
-    }
+    if (activeInlineVideo && activeInlineVideo !== container) stopInlineVideo(activeInlineVideo);
     stopInlineVideo(container);
     const frame = make('iframe', 'inline-video');
     frame.src = 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0&playsinline=1';
@@ -255,13 +262,27 @@ body{background:var(--bg);letter-spacing:-.012em}
     const close = make('button', 'inline-video-close', '×');
     close.type = 'button';
     close.setAttribute('aria-label', title + ' 닫기');
-    close.addEventListener('click', () => {
+    close.addEventListener('click', (event) => {
+      event.stopPropagation();
       stopInlineVideo(container);
-      container.querySelector('.hero-media-play, .modal-play')?.focus();
+      container.querySelector('.hero-media-play, .modal-play, .card-video-play')?.focus();
     });
     container.classList.add('is-playing');
+    activeInlineVideo = container;
     container.append(frame, close);
     close.focus();
+  };
+  const addCardVideoButton = (art, project) => {
+    const url = projectVideo(project);
+    if (!url) return;
+    const play = make('button', 'card-video-play', '▶');
+    play.type = 'button';
+    play.setAttribute('aria-label', project.title + ' 영상 재생');
+    play.addEventListener('click', (event) => {
+      event.stopPropagation();
+      playInlineVideo(art, url, project.title + ' 플레이 영상');
+    });
+    art.append(play);
   };
 
   byId('name').textContent = data.name;
@@ -305,6 +326,7 @@ body{background:var(--bg);letter-spacing:-.012em}
   const artClass = (project, index) => artwork.includes(project.id) ? project.id : artwork[index % artwork.length];
   const projectImage = (project) => safeUrl(project.imageUrl) || (project.id === 'back-together' ? assets.backTogether : '');
   const openProject = (project, index, direct = false) => {
+    if (activeInlineVideo) stopInlineVideo(activeInlineVideo);
     previousHash = direct ? '#work' : (location.hash.startsWith('#project-') ? '#work' : location.hash || '#work');
     byId('modal-kind').textContent = project.kind;
     byId('modal-title').textContent = project.title;
@@ -428,6 +450,7 @@ body{background:var(--bg);letter-spacing:-.012em}
       img.addEventListener('error', () => img.remove());
       art.prepend(img);
     }
+    addCardVideoButton(art, project);
     const body = make('div', 'project-body');
     const meta = make('div', 'project-meta');
     meta.append(make('span', '', project.kind), make('span', '', project.period));
@@ -443,6 +466,7 @@ body{background:var(--bg);letter-spacing:-.012em}
     card.append(art, body);
     card.addEventListener('click', () => openProject(project, index));
     card.addEventListener('keydown', (event) => {
+      if (event.target !== card) return;
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
         openProject(project, index);
@@ -530,12 +554,14 @@ body{background:var(--bg);letter-spacing:-.012em}
       item.setAttribute('aria-label', record.title + ' 프로젝트 자세히 보기');
       item.addEventListener('click', () => openProject(record.project, record.index));
       item.addEventListener('keydown', (event) => {
+        if (event.target !== item) return;
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openProject(record.project, record.index); }
       });
       const art = make('div', 'record-art project-art art-' + artClass(record.project, record.index));
       art.append(make('div', 'art-graphic'));
       const image = projectImage(record.project);
       if (image) { const img = make('img'); img.src = image; img.alt = ''; img.loading = 'lazy'; art.prepend(img); }
+      addCardVideoButton(art, record.project);
       item.append(art);
     }
     const body = make('div', 'record-body');
